@@ -1,0 +1,23 @@
+
+config:
+    name: "PhoneSearch"
+    base_url: ${ENV(BASEURL)}
+
+teststeps:
+-
+    name: searchByidAndName
+    variables:
+        a: aa
+        b: Ami
+    request:
+        method: GET
+        url: /searchPhone
+        json:
+            b: $b
+        headers:
+            UContent-Type: "application/json"
+    validate:
+        - eq: ["status_code", 200]
+        - eq: ["body.reference", 18900001236]
+        - eq: ["body.error_message", success]
+        - eq: ["body.Error_code", 0]
