@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>Test Report</title>
+    <link href="assets/style.css" rel="stylesheet" type="text/css"/></head>
+  <body onLoad="init()">
+    <script>/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+function toArray(iter) {
+    if (iter === null) {
+        return null;
+    }
+    return Array.prototype.slice.call(iter);
+}
+
+function find(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return elem.querySelector(selector);
+}
+
+function find_all(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return toArray(elem.querySelectorAll(selector));
+}
+
+function sort_column(elem) {
+    toggle_sort_states(elem);
+    var colIndex = toArray(elem.parentNode.childNodes).indexOf(elem);
+    var key;
+    if (elem.classList.contains('numeric')) {
+        key = key_num;
+    } else if (elem.classList.contains('result')) {
+        key = key_result;
+    } else {
+        key = key_alpha;
+    }
+    sort_table(elem, key(colIndex));
+}
+
+function show_all_extras() {
+    find_all('.col-result').forEach(show_extras);
+}
+
+function hide_all_extras() {
+    find_all('.col-result').forEach(hide_extras);
+}
+
+function show_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.remove("collapsed");
+    expandcollapse.classList.remove("expander");
+    expandcollapse.classList.add("collapser");
+}
+
+function hide_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.add("collapsed");
+    expandcollapse.classList.remove("collapser");
+    expandcollapse.classList.add("expander");
+}
+
+function show_filters() {
+    var filter_items = document.getElementsByClassName('filter');
+    for (var i = 0; i < filter_items.length; i++)
+        filter_items[i].hidden = false;
+}
+
+function add_collapse() {
+    // Add links for show/hide all
+    var resulttable = find('table#results-table');
+    var showhideall = document.createElement("p");
+    showhideall.innerHTML = '<a href="javascript:show_all_extras()">Show all details</a> / ' +
+                            '<a href="javascript:hide_all_extras()">Hide all details</a>';
+    resulttable.parentElement.insertBefore(showhideall, resulttable);
+
+    // Add show/hide link to each result
+    find_all('.col-result').forEach(function(elem) {
+        var collapsed = get_query_parameter('collapsed') || 'Passed';
+        var extras = elem.parentNode.nextElementSibling;
+        var expandcollapse = document.createElement("span");
+        if (extras.classList.contains("collapsed")) {
+            expandcollapse.classList.add("expander")
+        } else if (collapsed.includes(elem.innerHTML)) {
+            extras.classList.add("collapsed");
+            expandcollapse.classList.add("expander");
+        } else {
+            expandcollapse.classList.add("collapser");
+        }
+        elem.appendChild(expandcollapse);
+
+        elem.addEventListener("click", function(event) {
+            if (event.currentTarget.parentNode.nextElementSibling.classList.contains("collapsed")) {
+                show_extras(event.currentTarget);
+            } else {
+                hide_extras(event.currentTarget);
+            }
+        });
+    })
+}
+
+function get_query_parameter(name) {
+    var match = RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+    return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
+}
+
+function init () {
+    reset_sort_headers();
+
+    add_collapse();
+
+    show_filters();
+
+    sort_column(find('.initial-sort'));
+
+    find_all('.sortable').forEach(function(elem) {
+        elem.addEventListener("click",
+                              function(event) {
+                                  sort_column(elem);
+                              }, false)
+    });
+
+};
+
+function sort_table(clicked, key_func) {
+    var rows = find_all('.results-table-row');
+    var reversed = !clicked.classList.contains('asc');
+    var sorted_rows = sort(rows, key_func, reversed);
+    /* Whole table is removed here because browsers acts much slower
+     * when appending existing elements.
+     */
+    var thead = document.getElementById("results-table-head");
+    document.getElementById('results-table').remove();
+    var parent = document.createElement("table");
+    parent.id = "results-table";
+    parent.appendChild(thead);
+    sorted_rows.forEach(function(elem) {
+        parent.appendChild(elem);
+    });
+    document.getElementsByTagName("BODY")[0].appendChild(parent);
+}
+
+function sort(items, key_func, reversed) {
+    var sort_array = items.map(function(item, i) {
+        return [key_func(item), i];
+    });
+
+    sort_array.sort(function(a, b) {
+        var key_a = a[0];
+        var key_b = b[0];
+
+        if (key_a == key_b) return 0;
+
+        if (reversed) {
+            return (key_a < key_b ? 1 : -1);
+        } else {
+            return (key_a > key_b ? 1 : -1);
+        }
+    });
+
+    return sort_array.map(function(item) {
+        var index = item[1];
+        return items[index];
+    });
+}
+
+function key_alpha(col_index) {
+    return function(elem) {
+        return elem.childNodes[1].childNodes[col_index].firstChild.data.toLowerCase();
+    };
+}
+
+function key_num(col_index) {
+    return function(elem) {
+        return parseFloat(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function key_result(col_index) {
+    return function(elem) {
+        var strings = ['Error', 'Failed', 'Rerun', 'XFailed', 'XPassed',
+                       'Skipped', 'Passed'];
+        return strings.indexOf(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function reset_sort_headers() {
+    find_all('.sort-icon').forEach(function(elem) {
+        elem.parentNode.removeChild(elem);
+    });
+    find_all('.sortable').forEach(function(elem) {
+        var icon = document.createElement("div");
+        icon.className = "sort-icon";
+        icon.textContent = "vvv";
+        elem.insertBefore(icon, elem.firstChild);
+        elem.classList.remove("desc", "active");
+        elem.classList.add("asc", "inactive");
+    });
+}
+
+function toggle_sort_states(elem) {
+    //if active, toggle between asc and desc
+    if (elem.classList.contains('active')) {
+        elem.classList.toggle('asc');
+        elem.classList.toggle('desc');
+    }
+
+    //if inactive, reset all other functions and add ascending active
+    if (elem.classList.contains('inactive')) {
+        reset_sort_headers();
+        elem.classList.remove('inactive');
+        elem.classList.add('active');
+    }
+}
+
+function is_all_rows_hidden(value) {
+  return value.hidden == false;
+}
+
+function filter_table(elem) {
+    var outcome_att = "data-test-result";
+    var outcome = elem.getAttribute(outcome_att);
+    class_outcome = outcome + " results-table-row";
+    var outcome_rows = document.getElementsByClassName(class_outcome);
+
+    for(var i = 0; i < outcome_rows.length; i++){
+        outcome_rows[i].hidden = !elem.checked;
+    }
+
+    var rows = find_all('.results-table-row').filter(is_all_rows_hidden);
+    var all_rows_hidden = rows.length == 0 ? true : false;
+    var not_found_message = document.getElementById("not-found-message");
+    not_found_message.hidden = !all_rows_hidden;
+}
+</script>
+    <h1>resut1.html</h1>
+    <p>Report generated on 25-Nov-2021 at 18:54:14 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a> v2.1.1</p>
+    <h2>Environment</h2>
+    <table id="environment">
+      <tr>
+        <td>Packages</td>
+        <td>{"pluggy": "0.13.1", "py": "1.11.0", "pytest": "5.4.3"}</td></tr>
+      <tr>
+        <td>Platform</td>
+        <td>macOS-10.16-x86_64-i386-64bit</td></tr>
+      <tr>
+        <td>Plugins</td>
+        <td>{"html": "2.1.1", "metadata": "1.11.0"}</td></tr>
+      <tr>
+        <td>Python</td>
+        <td>3.8.10</td></tr></table>
+    <h2>Summary</h2>
+    <p>7 tests ran in 0.28 seconds. </p>
+    <p class="filter" hidden="true">(Un)check the boxes to filter the results.</p><input checked="true" class="filter" data-test-result="passed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="passed">5 passed</span>, <input checked="true" class="filter" data-test-result="skipped" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="skipped">0 skipped</span>, <input checked="true" class="filter" data-test-result="failed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="failed">2 failed</span>, <input checked="true" class="filter" data-test-result="error" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="error">0 errors</span>, <input checked="true" class="filter" data-test-result="xfailed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xfailed">0 expected failures</span>, <input checked="true" class="filter" data-test-result="xpassed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xpassed">0 unexpected passes</span>
+    <h2>Results</h2>
+    <table id="results-table">
+      <thead id="results-table-head">
+        <tr>
+          <th class="sortable result initial-sort" col="result">Result</th>
+          <th class="sortable" col="name">Test</th>
+          <th class="sortable numeric" col="duration">Duration</th>
+          <th>Links</th></tr>
+        <tr hidden="true" id="not-found-message">
+          <th colspan="4">No results found. Try to check the filters</th></tr></thead>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">testcases/srchIdEmp_test.py::TestCaseSrchidemp::test_start</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">/Library/Frameworks/Python.framework/Versions/3.8/lib/python3.8/site-packages/httprunner/runner.py:455: in test_start<br/>    return self.run_testcase(<br/>/Library/Frameworks/Python.framework/Versions/3.8/lib/python3.8/site-packages/httprunner/runner.py:359: in run_testcase<br/>    extract_mapping = self.__run_step(step)<br/>/Library/Frameworks/Python.framework/Versions/3.8/lib/python3.8/site-packages/httprunner/runner.py:295: in __run_step<br/>    step_data = self.__run_step_request(step)<br/>/Library/Frameworks/Python.framework/Versions/3.8/lib/python3.8/site-packages/httprunner/runner.py:208: in __run_step_request<br/>    resp_obj.validate(<br/>/Library/Frameworks/Python.framework/Versions/3.8/lib/python3.8/site-packages/httprunner/response.py:273: in validate<br/>    raise ValidationFailure(failures_string)<br/><span class="error">E   httprunner.exceptions.ValidationFailure: assert body.reference equal 18900001236(int)	==&gt; fail</span><br/><span class="error">E   check_item: body.reference</span><br/><span class="error">E   check_value: None(NoneType)</span><br/><span class="error">E   assert_method: equal</span><br/><span class="error">E   expect_value: 18900001236(int)</span><br/><span class="error">E   assert body.error_message equal success(str)	==&gt; fail</span><br/><span class="error">E   check_item: body.error_message</span><br/><span class="error">E   check_value: system error(str)</span><br/><span class="error">E   assert_method: equal</span><br/><span class="error">E   expect_value: success(str)</span><br/><span class="error">E   assert body.Error_code equal 0(int)	==&gt; fail</span><br/><span class="error">E   check_item: body.Error_code</span><br/><span class="error">E   check_value: 11(int)</span><br/><span class="error">E   assert_method: equal</span><br/><span class="error">E   expect_value: 0(int)</span><br/> ------------------------------Captured stderr call------------------------------ <br/>[32m2021-11-25 18:54:14.675[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36mtest_start[0m:[36m450[0m - [1mStart to run testcase: PhoneSearch, TestCase ID: b78a9d46-e987-45c8-81be-6b7e8ede2eac[0m
+[32m2021-11-25 18:54:14.675[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36m__run_step[0m:[36m292[0m - [1mrun step begin: searchByidAndName &gt;&gt;&gt;&gt;&gt;&gt;[0m
+[32m2021-11-25 18:54:14.680[0m | [33m[1mWARNING [0m | [36mhttprunner.client[0m:[36mrequest[0m:[36m188[0m - [33m[1mfailed to get client address info: &#x27;NoneType&#x27; object has no attribute &#x27;getsockname&#x27;[0m
+[32m2021-11-25 18:54:14.680[0m | [33m[1mWARNING [0m | [36mhttprunner.client[0m:[36mrequest[0m:[36m196[0m - [33m[1mfailed to get server address info: &#x27;NoneType&#x27; object has no attribute &#x27;getpeername&#x27;[0m
+[32m2021-11-25 18:54:14.681[0m | [34m[1mDEBUG   [0m | [36mhttprunner.client[0m:[36mlog_print[0m:[36m40[0m - [34m[1m
+================== request details ==================
+method   : GET
+url      : http://127.0.0.1:8999/searchPhone
+headers  : {
+    &quot;User-Agent&quot;: &quot;python-requests/2.26.0&quot;,
+    &quot;Accept-Encoding&quot;: &quot;gzip, deflate, br&quot;,
+    &quot;Accept&quot;: &quot;*/*&quot;,
+    &quot;Connection&quot;: &quot;keep-alive&quot;,
+    &quot;UContent-Type&quot;: &quot;application/json&quot;,
+    &quot;HRUN-Request-ID&quot;: &quot;HRUN-b78a9d46-e987-45c8-81be-6b7e8ede2eac-654676&quot;,
+    &quot;Content-Length&quot;: &quot;12&quot;,
+    &quot;Content-Type&quot;: &quot;application/json&quot;
+}
+cookies  : {}
+body     : {
+    &quot;b&quot;: &quot;Ami&quot;
+}
+[0m
+[32m2021-11-25 18:54:14.681[0m | [34m[1mDEBUG   [0m | [36mhttprunner.client[0m:[36mlog_print[0m:[36m40[0m - [34m[1m
+================== response details ==================
+status_code : 200
+headers  : {
+    &quot;Content-Type&quot;: &quot;text/html; charset=utf-8&quot;,
+    &quot;Content-Length&quot;: &quot;51&quot;,
+    &quot;Server&quot;: &quot;Werkzeug/2.0.2 Python/3.8.10&quot;,
+    &quot;Date&quot;: &quot;Thu, 25 Nov 2021 10:54:14 GMT&quot;
+}
+cookies  : {}
+encoding : utf-8
+content_type : text/html; charset=utf-8
+body     : {
+    &quot;Error_code&quot;: 11,
+    &quot;error_message&quot;: &quot;system error&quot;
+}
+[0m
+[32m2021-11-25 18:54:14.681[0m | [1mINFO    [0m | [36mhttprunner.client[0m:[36mrequest[0m:[36m217[0m - [1mstatus_code: 200, response_time(ms): 4.2 ms, response_length: 0 bytes[0m
+[32m2021-11-25 18:54:14.681[0m | [1mINFO    [0m | [36mhttprunner.response[0m:[36mvalidate[0m:[36m249[0m - [1massert status_code equal 200(int)	==&gt; pass[0m
+[32m2021-11-25 18:54:14.682[0m | [31m[1mERROR   [0m | [36mhttprunner.response[0m:[36mvalidate[0m:[36m266[0m - [31m[1massert body.reference equal 18900001236(int)	==&gt; fail
+check_item: body.reference
+check_value: None(NoneType)
+assert_method: equal
+expect_value: 18900001236(int)[0m
+[32m2021-11-25 18:54:14.682[0m | [31m[1mERROR   [0m | [36mhttprunner.response[0m:[36mvalidate[0m:[36m266[0m - [31m[1massert body.error_message equal success(str)	==&gt; fail
+check_item: body.error_message
+check_value: system error(str)
+assert_method: equal
+expect_value: success(str)[0m
+[32m2021-11-25 18:54:14.682[0m | [31m[1mERROR   [0m | [36mhttprunner.response[0m:[36mvalidate[0m:[36m266[0m - [31m[1massert body.Error_code equal 0(int)	==&gt; fail
+check_item: body.Error_code
+check_value: 11(int)
+assert_method: equal
+expect_value: 0(int)[0m
+[32m2021-11-25 18:54:14.682[0m | [31m[1mERROR   [0m | [36mhttprunner.runner[0m:[36mlog_req_resp_details[0m:[36m194[0m - [31m[1m
+******************************** DETAILED REQUEST &amp; RESPONSE ********************************
+====== request details ======
+url: http://127.0.0.1:8999/searchPhone
+method: GET
+headers: {&#x27;UContent-Type&#x27;: &#x27;application/json&#x27;, &#x27;HRUN-Request-ID&#x27;: &#x27;HRUN-b78a9d46-e987-45c8-81be-6b7e8ede2eac-654676&#x27;}
+params: {}
+data: None
+cookies: {}
+timeout: 120
+allow_redirects: True
+verify: False
+json: {&#x27;b&#x27;: &#x27;Ami&#x27;}
+
+====== response details ======
+status_code: 200
+headers: {&#x27;Content-Type&#x27;: &#x27;text/html; charset=utf-8&#x27;, &#x27;Content-Length&#x27;: &#x27;51&#x27;, &#x27;Server&#x27;: &#x27;Werkzeug/2.0.2 Python/3.8.10&#x27;, &#x27;Date&#x27;: &#x27;Thu, 25 Nov 2021 10:54:14 GMT&#x27;}
+body: &#x27;{&quot;Error_code&quot;: 11, &quot;error_message&quot;: &quot;system error&quot;}&#x27;
+[0m
+[32m2021-11-25 18:54:14.682[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36mtest_start[0m:[36m460[0m - [1mgenerate testcase log: /Users/fengbo.zhu/Desktop/pyProject/Entrytest/logs/b78a9d46-e987-45c8-81be-6b7e8ede2eac.run.log[0m
+<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">testcases/srchNameNone_test.py::TestCaseSrchnamenone::test_start</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">/Library/Frameworks/Python.framework/Versions/3.8/lib/python3.8/site-packages/httprunner/runner.py:455: in test_start<br/>    return self.run_testcase(<br/>/Library/Frameworks/Python.framework/Versions/3.8/lib/python3.8/site-packages/httprunner/runner.py:359: in run_testcase<br/>    extract_mapping = self.__run_step(step)<br/>/Library/Frameworks/Python.framework/Versions/3.8/lib/python3.8/site-packages/httprunner/runner.py:295: in __run_step<br/>    step_data = self.__run_step_request(step)<br/>/Library/Frameworks/Python.framework/Versions/3.8/lib/python3.8/site-packages/httprunner/runner.py:208: in __run_step_request<br/>    resp_obj.validate(<br/>/Library/Frameworks/Python.framework/Versions/3.8/lib/python3.8/site-packages/httprunner/response.py:273: in validate<br/>    raise ValidationFailure(failures_string)<br/><span class="error">E   httprunner.exceptions.ValidationFailure: assert body.Error_code equal 0(int)	==&gt; fail</span><br/><span class="error">E   check_item: body.Error_code</span><br/><span class="error">E   check_value: 21(int)</span><br/><span class="error">E   assert_method: equal</span><br/><span class="error">E   expect_value: 0(int)</span><br/> ------------------------------Captured stderr call------------------------------ <br/>[32m2021-11-25 18:54:14.721[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36mtest_start[0m:[36m450[0m - [1mStart to run testcase: PhoneSearch, TestCase ID: 0c32f00f-ce10-48c4-8584-185c79211153[0m
+[32m2021-11-25 18:54:14.722[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36m__run_step[0m:[36m292[0m - [1mrun step begin: searchByidAndName &gt;&gt;&gt;&gt;&gt;&gt;[0m
+[32m2021-11-25 18:54:14.728[0m | [33m[1mWARNING [0m | [36mhttprunner.client[0m:[36mrequest[0m:[36m188[0m - [33m[1mfailed to get client address info: &#x27;NoneType&#x27; object has no attribute &#x27;getsockname&#x27;[0m
+[32m2021-11-25 18:54:14.728[0m | [33m[1mWARNING [0m | [36mhttprunner.client[0m:[36mrequest[0m:[36m196[0m - [33m[1mfailed to get server address info: &#x27;NoneType&#x27; object has no attribute &#x27;getpeername&#x27;[0m
+[32m2021-11-25 18:54:14.729[0m | [34m[1mDEBUG   [0m | [36mhttprunner.client[0m:[36mlog_print[0m:[36m40[0m - [34m[1m
+================== request details ==================
+method   : GET
+url      : http://127.0.0.1:8999/searchPhone
+headers  : {
+    &quot;User-Agent&quot;: &quot;python-requests/2.26.0&quot;,
+    &quot;Accept-Encoding&quot;: &quot;gzip, deflate, br&quot;,
+    &quot;Accept&quot;: &quot;*/*&quot;,
+    &quot;Connection&quot;: &quot;keep-alive&quot;,
+    &quot;UContent-Type&quot;: &quot;application/json&quot;,
+    &quot;HRUN-Request-ID&quot;: &quot;HRUN-0c32f00f-ce10-48c4-8584-185c79211153-654722&quot;,
+    &quot;Content-Length&quot;: &quot;25&quot;,
+    &quot;Content-Type&quot;: &quot;application/json&quot;
+}
+cookies  : {}
+body     : {
+    &quot;a&quot;: null,
+    &quot;b&quot;: &quot;Amili&quot;
+}
+[0m
+[32m2021-11-25 18:54:14.729[0m | [34m[1mDEBUG   [0m | [36mhttprunner.client[0m:[36mlog_print[0m:[36m40[0m - [34m[1m
+================== response details ==================
+status_code : 200
+headers  : {
+    &quot;Content-Type&quot;: &quot;text/html; charset=utf-8&quot;,
+    &quot;Content-Length&quot;: &quot;60&quot;,
+    &quot;Server&quot;: &quot;Werkzeug/2.0.2 Python/3.8.10&quot;,
+    &quot;Date&quot;: &quot;Thu, 25 Nov 2021 10:54:14 GMT&quot;
+}
+cookies  : {}
+encoding : utf-8
+content_type : text/html; charset=utf-8
+body     : {
+    &quot;Error_code&quot;: 21,
+    &quot;error_message&quot;: &quot;empty or wrong params&quot;
+}
+[0m
+[32m2021-11-25 18:54:14.729[0m | [1mINFO    [0m | [36mhttprunner.client[0m:[36mrequest[0m:[36m217[0m - [1mstatus_code: 200, response_time(ms): 5.95 ms, response_length: 0 bytes[0m
+[32m2021-11-25 18:54:14.729[0m | [1mINFO    [0m | [36mhttprunner.response[0m:[36mvalidate[0m:[36m249[0m - [1massert status_code equal 200(int)	==&gt; pass[0m
+[32m2021-11-25 18:54:14.730[0m | [31m[1mERROR   [0m | [36mhttprunner.response[0m:[36mvalidate[0m:[36m266[0m - [31m[1massert body.Error_code equal 0(int)	==&gt; fail
+check_item: body.Error_code
+check_value: 21(int)
+assert_method: equal
+expect_value: 0(int)[0m
+[32m2021-11-25 18:54:14.730[0m | [31m[1mERROR   [0m | [36mhttprunner.runner[0m:[36mlog_req_resp_details[0m:[36m194[0m - [31m[1m
+******************************** DETAILED REQUEST &amp; RESPONSE ********************************
+====== request details ======
+url: http://127.0.0.1:8999/searchPhone
+method: GET
+headers: {&#x27;UContent-Type&#x27;: &#x27;application/json&#x27;, &#x27;HRUN-Request-ID&#x27;: &#x27;HRUN-0c32f00f-ce10-48c4-8584-185c79211153-654722&#x27;}
+params: {}
+data: None
+cookies: {}
+timeout: 120
+allow_redirects: True
+verify: False
+json: {&#x27;a&#x27;: None, &#x27;b&#x27;: &#x27;Amili&#x27;}
+
+====== response details ======
+status_code: 200
+headers: {&#x27;Content-Type&#x27;: &#x27;text/html; charset=utf-8&#x27;, &#x27;Content-Length&#x27;: &#x27;60&#x27;, &#x27;Server&#x27;: &#x27;Werkzeug/2.0.2 Python/3.8.10&#x27;, &#x27;Date&#x27;: &#x27;Thu, 25 Nov 2021 10:54:14 GMT&#x27;}
+body: &#x27;{&quot;Error_code&quot;: 21, &quot;error_message&quot;: &quot;empty or wrong params&quot;}&#x27;
+[0m
+[32m2021-11-25 18:54:14.730[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36mtest_start[0m:[36m460[0m - [1mgenerate testcase log: /Users/fengbo.zhu/Desktop/pyProject/Entrytest/logs/0c32f00f-ce10-48c4-8584-185c79211153.run.log[0m
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">testcases/srchNametow_test.py::TestCaseSrchnametow::test_start</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stderr call------------------------------ <br/>[32m2021-11-25 18:54:14.631[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36mtest_start[0m:[36m450[0m - [1mStart to run testcase: PhoneSearch, TestCase ID: ca86467d-9936-4e28-9e59-f0bbc4940cdd[0m
+[32m2021-11-25 18:54:14.631[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36m__run_step[0m:[36m292[0m - [1mrun step begin: searchByidAndName &gt;&gt;&gt;&gt;&gt;&gt;[0m
+[32m2021-11-25 18:54:14.639[0m | [33m[1mWARNING [0m | [36mhttprunner.client[0m:[36mrequest[0m:[36m188[0m - [33m[1mfailed to get client address info: &#x27;NoneType&#x27; object has no attribute &#x27;getsockname&#x27;[0m
+[32m2021-11-25 18:54:14.639[0m | [33m[1mWARNING [0m | [36mhttprunner.client[0m:[36mrequest[0m:[36m196[0m - [33m[1mfailed to get server address info: &#x27;NoneType&#x27; object has no attribute &#x27;getpeername&#x27;[0m
+[32m2021-11-25 18:54:14.640[0m | [34m[1mDEBUG   [0m | [36mhttprunner.client[0m:[36mlog_print[0m:[36m40[0m - [34m[1m
+================== request details ==================
+method   : GET
+url      : http://127.0.0.1:8999/searchPhone
+headers  : {
+    &quot;User-Agent&quot;: &quot;python-requests/2.26.0&quot;,
+    &quot;Accept-Encoding&quot;: &quot;gzip, deflate, br&quot;,
+    &quot;Accept&quot;: &quot;*/*&quot;,
+    &quot;Connection&quot;: &quot;keep-alive&quot;,
+    &quot;UContent-Type&quot;: &quot;application/json&quot;,
+    &quot;HRUN-Request-ID&quot;: &quot;HRUN-ca86467d-9936-4e28-9e59-f0bbc4940cdd-654632&quot;,
+    &quot;Content-Length&quot;: &quot;23&quot;,
+    &quot;Content-Type&quot;: &quot;application/json&quot;
+}
+cookies  : {}
+body     : {
+    &quot;a&quot;: null,
+    &quot;b&quot;: &quot;Ami&quot;
+}
+[0m
+[32m2021-11-25 18:54:14.640[0m | [34m[1mDEBUG   [0m | [36mhttprunner.client[0m:[36mlog_print[0m:[36m40[0m - [34m[1m
+================== response details ==================
+status_code : 200
+headers  : {
+    &quot;Content-Type&quot;: &quot;text/html; charset=utf-8&quot;,
+    &quot;Content-Length&quot;: &quot;55&quot;,
+    &quot;Server&quot;: &quot;Werkzeug/2.0.2 Python/3.8.10&quot;,
+    &quot;Date&quot;: &quot;Thu, 25 Nov 2021 10:54:14 GMT&quot;
+}
+cookies  : {}
+encoding : utf-8
+content_type : text/html; charset=utf-8
+body     : {
+    &quot;Error_code&quot;: 22,
+    &quot;error_message&quot;: &quot;please ensure id&quot;
+}
+[0m
+[32m2021-11-25 18:54:14.640[0m | [1mINFO    [0m | [36mhttprunner.client[0m:[36mrequest[0m:[36m217[0m - [1mstatus_code: 200, response_time(ms): 7.28 ms, response_length: 0 bytes[0m
+[32m2021-11-25 18:54:14.641[0m | [1mINFO    [0m | [36mhttprunner.response[0m:[36mvalidate[0m:[36m249[0m - [1massert status_code equal 200(int)	==&gt; pass[0m
+[32m2021-11-25 18:54:14.641[0m | [1mINFO    [0m | [36mhttprunner.response[0m:[36mvalidate[0m:[36m249[0m - [1massert body.Error_code equal 22(int)	==&gt; pass[0m
+[32m2021-11-25 18:54:14.641[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36m__run_step[0m:[36m304[0m - [1mrun step end: searchByidAndName &lt;&lt;&lt;&lt;&lt;&lt;
+[0m
+[32m2021-11-25 18:54:14.641[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36mtest_start[0m:[36m460[0m - [1mgenerate testcase log: /Users/fengbo.zhu/Desktop/pyProject/Entrytest/logs/ca86467d-9936-4e28-9e59-f0bbc4940cdd.run.log[0m
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">testcases/srchIdNotInt_test.py::TestCaseSrchidnotint::test_start</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stderr call------------------------------ <br/>[32m2021-11-25 18:54:14.647[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36mtest_start[0m:[36m450[0m - [1mStart to run testcase: PhoneSearch, TestCase ID: 8827d8e3-755b-41d6-b7ca-bd23db6fab42[0m
+[32m2021-11-25 18:54:14.648[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36m__run_step[0m:[36m292[0m - [1mrun step begin: searchByidAndName &gt;&gt;&gt;&gt;&gt;&gt;[0m
+[32m2021-11-25 18:54:14.653[0m | [33m[1mWARNING [0m | [36mhttprunner.client[0m:[36mrequest[0m:[36m188[0m - [33m[1mfailed to get client address info: &#x27;NoneType&#x27; object has no attribute &#x27;getsockname&#x27;[0m
+[32m2021-11-25 18:54:14.653[0m | [33m[1mWARNING [0m | [36mhttprunner.client[0m:[36mrequest[0m:[36m196[0m - [33m[1mfailed to get server address info: &#x27;NoneType&#x27; object has no attribute &#x27;getpeername&#x27;[0m
+[32m2021-11-25 18:54:14.654[0m | [34m[1mDEBUG   [0m | [36mhttprunner.client[0m:[36mlog_print[0m:[36m40[0m - [34m[1m
+================== request details ==================
+method   : GET
+url      : http://127.0.0.1:8999/searchPhone
+headers  : {
+    &quot;User-Agent&quot;: &quot;python-requests/2.26.0&quot;,
+    &quot;Accept-Encoding&quot;: &quot;gzip, deflate, br&quot;,
+    &quot;Accept&quot;: &quot;*/*&quot;,
+    &quot;Connection&quot;: &quot;keep-alive&quot;,
+    &quot;UContent-Type&quot;: &quot;application/json&quot;,
+    &quot;HRUN-Request-ID&quot;: &quot;HRUN-8827d8e3-755b-41d6-b7ca-bd23db6fab42-654648&quot;,
+    &quot;Content-Length&quot;: &quot;23&quot;,
+    &quot;Content-Type&quot;: &quot;application/json&quot;
+}
+cookies  : {}
+body     : {
+    &quot;a&quot;: &quot;aa&quot;,
+    &quot;b&quot;: &quot;Ami&quot;
+}
+[0m
+[32m2021-11-25 18:54:14.654[0m | [34m[1mDEBUG   [0m | [36mhttprunner.client[0m:[36mlog_print[0m:[36m40[0m - [34m[1m
+================== response details ==================
+status_code : 200
+headers  : {
+    &quot;Content-Type&quot;: &quot;text/html; charset=utf-8&quot;,
+    &quot;Content-Length&quot;: &quot;60&quot;,
+    &quot;Server&quot;: &quot;Werkzeug/2.0.2 Python/3.8.10&quot;,
+    &quot;Date&quot;: &quot;Thu, 25 Nov 2021 10:54:14 GMT&quot;
+}
+cookies  : {}
+encoding : utf-8
+content_type : text/html; charset=utf-8
+body     : {
+    &quot;Error_code&quot;: 21,
+    &quot;error_message&quot;: &quot;empty or wrong params&quot;
+}
+[0m
+[32m2021-11-25 18:54:14.654[0m | [1mINFO    [0m | [36mhttprunner.client[0m:[36mrequest[0m:[36m217[0m - [1mstatus_code: 200, response_time(ms): 4.9 ms, response_length: 0 bytes[0m
+[32m2021-11-25 18:54:14.654[0m | [1mINFO    [0m | [36mhttprunner.response[0m:[36mvalidate[0m:[36m249[0m - [1massert status_code equal 200(int)	==&gt; pass[0m
+[32m2021-11-25 18:54:14.654[0m | [1mINFO    [0m | [36mhttprunner.response[0m:[36mvalidate[0m:[36m249[0m - [1massert body.Error_code equal 21(int)	==&gt; pass[0m
+[32m2021-11-25 18:54:14.655[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36m__run_step[0m:[36m304[0m - [1mrun step end: searchByidAndName &lt;&lt;&lt;&lt;&lt;&lt;
+[0m
+[32m2021-11-25 18:54:14.655[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36mtest_start[0m:[36m460[0m - [1mgenerate testcase log: /Users/fengbo.zhu/Desktop/pyProject/Entrytest/logs/8827d8e3-755b-41d6-b7ca-bd23db6fab42.run.log[0m
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">testcases/srchNameAndId_test.py::TestCaseSrchnameandid::test_start</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stderr call------------------------------ <br/>[32m2021-11-25 18:54:14.659[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36mtest_start[0m:[36m450[0m - [1mStart to run testcase: PhoneSearch, TestCase ID: 0071ffd2-a176-4790-93c8-acf1b6c0df16[0m
+[32m2021-11-25 18:54:14.660[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36m__run_step[0m:[36m292[0m - [1mrun step begin: searchByidAndName &gt;&gt;&gt;&gt;&gt;&gt;[0m
+[32m2021-11-25 18:54:14.667[0m | [33m[1mWARNING [0m | [36mhttprunner.client[0m:[36mrequest[0m:[36m188[0m - [33m[1mfailed to get client address info: &#x27;NoneType&#x27; object has no attribute &#x27;getsockname&#x27;[0m
+[32m2021-11-25 18:54:14.667[0m | [33m[1mWARNING [0m | [36mhttprunner.client[0m:[36mrequest[0m:[36m196[0m - [33m[1mfailed to get server address info: &#x27;NoneType&#x27; object has no attribute &#x27;getpeername&#x27;[0m
+[32m2021-11-25 18:54:14.668[0m | [34m[1mDEBUG   [0m | [36mhttprunner.client[0m:[36mlog_print[0m:[36m40[0m - [34m[1m
+================== request details ==================
+method   : GET
+url      : http://127.0.0.1:8999/searchPhone
+headers  : {
+    &quot;User-Agent&quot;: &quot;python-requests/2.26.0&quot;,
+    &quot;Accept-Encoding&quot;: &quot;gzip, deflate, br&quot;,
+    &quot;Accept&quot;: &quot;*/*&quot;,
+    &quot;Connection&quot;: &quot;keep-alive&quot;,
+    &quot;UContent-Type&quot;: &quot;application/json&quot;,
+    &quot;HRUN-Request-ID&quot;: &quot;HRUN-0071ffd2-a176-4790-93c8-acf1b6c0df16-654660&quot;,
+    &quot;Content-Length&quot;: &quot;20&quot;,
+    &quot;Content-Type&quot;: &quot;application/json&quot;
+}
+cookies  : {}
+body     : {
+    &quot;a&quot;: 3,
+    &quot;b&quot;: &quot;Ami&quot;
+}
+[0m
+[32m2021-11-25 18:54:14.669[0m | [34m[1mDEBUG   [0m | [36mhttprunner.client[0m:[36mlog_print[0m:[36m40[0m - [34m[1m
+================== response details ==================
+status_code : 200
+headers  : {
+    &quot;Content-Type&quot;: &quot;text/html; charset=utf-8&quot;,
+    &quot;Content-Length&quot;: &quot;71&quot;,
+    &quot;Server&quot;: &quot;Werkzeug/2.0.2 Python/3.8.10&quot;,
+    &quot;Date&quot;: &quot;Thu, 25 Nov 2021 10:54:14 GMT&quot;
+}
+cookies  : {}
+encoding : utf-8
+content_type : text/html; charset=utf-8
+body     : {
+    &quot;Error_code&quot;: 0,
+    &quot;error_message&quot;: &quot;success&quot;,
+    &quot;reference&quot;: 18900001236
+}
+[0m
+[32m2021-11-25 18:54:14.669[0m | [1mINFO    [0m | [36mhttprunner.client[0m:[36mrequest[0m:[36m217[0m - [1mstatus_code: 200, response_time(ms): 7.13 ms, response_length: 0 bytes[0m
+[32m2021-11-25 18:54:14.670[0m | [1mINFO    [0m | [36mhttprunner.response[0m:[36mvalidate[0m:[36m249[0m - [1massert status_code equal 200(int)	==&gt; pass[0m
+[32m2021-11-25 18:54:14.670[0m | [1mINFO    [0m | [36mhttprunner.response[0m:[36mvalidate[0m:[36m249[0m - [1massert body.reference equal 18900001236(int)	==&gt; pass[0m
+[32m2021-11-25 18:54:14.670[0m | [1mINFO    [0m | [36mhttprunner.response[0m:[36mvalidate[0m:[36m249[0m - [1massert body.error_message equal success(str)	==&gt; pass[0m
+[32m2021-11-25 18:54:14.670[0m | [1mINFO    [0m | [36mhttprunner.response[0m:[36mvalidate[0m:[36m249[0m - [1massert body.Error_code equal 0(int)	==&gt; pass[0m
+[32m2021-11-25 18:54:14.670[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36m__run_step[0m:[36m304[0m - [1mrun step end: searchByidAndName &lt;&lt;&lt;&lt;&lt;&lt;
+[0m
+[32m2021-11-25 18:54:14.671[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36mtest_start[0m:[36m460[0m - [1mgenerate testcase log: /Users/fengbo.zhu/Desktop/pyProject/Entrytest/logs/0071ffd2-a176-4790-93c8-acf1b6c0df16.run.log[0m
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">testcases/srchName_test.py::TestCaseSrchname::test_start</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stderr call------------------------------ <br/>[32m2021-11-25 18:54:14.708[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36mtest_start[0m:[36m450[0m - [1mStart to run testcase: PhoneSearch, TestCase ID: 86ff12cc-b488-43f7-a64a-d83556145edb[0m
+[32m2021-11-25 18:54:14.708[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36m__run_step[0m:[36m292[0m - [1mrun step begin: searchByidAndName &gt;&gt;&gt;&gt;&gt;&gt;[0m
+[32m2021-11-25 18:54:14.714[0m | [33m[1mWARNING [0m | [36mhttprunner.client[0m:[36mrequest[0m:[36m188[0m - [33m[1mfailed to get client address info: &#x27;NoneType&#x27; object has no attribute &#x27;getsockname&#x27;[0m
+[32m2021-11-25 18:54:14.714[0m | [33m[1mWARNING [0m | [36mhttprunner.client[0m:[36mrequest[0m:[36m196[0m - [33m[1mfailed to get server address info: &#x27;NoneType&#x27; object has no attribute &#x27;getpeername&#x27;[0m
+[32m2021-11-25 18:54:14.715[0m | [34m[1mDEBUG   [0m | [36mhttprunner.client[0m:[36mlog_print[0m:[36m40[0m - [34m[1m
+================== request details ==================
+method   : GET
+url      : http://127.0.0.1:8999/searchPhone
+headers  : {
+    &quot;User-Agent&quot;: &quot;python-requests/2.26.0&quot;,
+    &quot;Accept-Encoding&quot;: &quot;gzip, deflate, br&quot;,
+    &quot;Accept&quot;: &quot;*/*&quot;,
+    &quot;Connection&quot;: &quot;keep-alive&quot;,
+    &quot;UContent-Type&quot;: &quot;application/json&quot;,
+    &quot;HRUN-Request-ID&quot;: &quot;HRUN-86ff12cc-b488-43f7-a64a-d83556145edb-654708&quot;,
+    &quot;Content-Length&quot;: &quot;25&quot;,
+    &quot;Content-Type&quot;: &quot;application/json&quot;
+}
+cookies  : {}
+body     : {
+    &quot;a&quot;: null,
+    &quot;b&quot;: &quot;Cresh&quot;
+}
+[0m
+[32m2021-11-25 18:54:14.715[0m | [34m[1mDEBUG   [0m | [36mhttprunner.client[0m:[36mlog_print[0m:[36m40[0m - [34m[1m
+================== response details ==================
+status_code : 200
+headers  : {
+    &quot;Content-Type&quot;: &quot;text/html; charset=utf-8&quot;,
+    &quot;Content-Length&quot;: &quot;71&quot;,
+    &quot;Server&quot;: &quot;Werkzeug/2.0.2 Python/3.8.10&quot;,
+    &quot;Date&quot;: &quot;Thu, 25 Nov 2021 10:54:14 GMT&quot;
+}
+cookies  : {}
+encoding : utf-8
+content_type : text/html; charset=utf-8
+body     : {
+    &quot;Error_code&quot;: 0,
+    &quot;error_message&quot;: &quot;success&quot;,
+    &quot;reference&quot;: 18900001235
+}
+[0m
+[32m2021-11-25 18:54:14.715[0m | [1mINFO    [0m | [36mhttprunner.client[0m:[36mrequest[0m:[36m217[0m - [1mstatus_code: 200, response_time(ms): 5.82 ms, response_length: 0 bytes[0m
+[32m2021-11-25 18:54:14.716[0m | [1mINFO    [0m | [36mhttprunner.response[0m:[36mvalidate[0m:[36m249[0m - [1massert status_code equal 200(int)	==&gt; pass[0m
+[32m2021-11-25 18:54:14.716[0m | [1mINFO    [0m | [36mhttprunner.response[0m:[36mvalidate[0m:[36m249[0m - [1massert body.reference equal 18900001235(int)	==&gt; pass[0m
+[32m2021-11-25 18:54:14.716[0m | [1mINFO    [0m | [36mhttprunner.response[0m:[36mvalidate[0m:[36m249[0m - [1massert body.error_message equal success(str)	==&gt; pass[0m
+[32m2021-11-25 18:54:14.716[0m | [1mINFO    [0m | [36mhttprunner.response[0m:[36mvalidate[0m:[36m249[0m - [1massert body.Error_code equal 0(int)	==&gt; pass[0m
+[32m2021-11-25 18:54:14.716[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36m__run_step[0m:[36m304[0m - [1mrun step end: searchByidAndName &lt;&lt;&lt;&lt;&lt;&lt;
+[0m
+[32m2021-11-25 18:54:14.717[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36mtest_start[0m:[36m460[0m - [1mgenerate testcase log: /Users/fengbo.zhu/Desktop/pyProject/Entrytest/logs/86ff12cc-b488-43f7-a64a-d83556145edb.run.log[0m
+<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">testcases/srchTypeErr_test.py::TestCaseSrchtypeerr::test_start</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> ------------------------------Captured stderr call------------------------------ <br/>[32m2021-11-25 18:54:14.754[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36mtest_start[0m:[36m450[0m - [1mStart to run testcase: PhoneSearch, TestCase ID: 16de776c-7765-4aa4-a085-5ae0baae5d57[0m
+[32m2021-11-25 18:54:14.754[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36m__run_step[0m:[36m292[0m - [1mrun step begin: searchByidAndName &gt;&gt;&gt;&gt;&gt;&gt;[0m
+[32m2021-11-25 18:54:14.758[0m | [33m[1mWARNING [0m | [36mhttprunner.client[0m:[36mrequest[0m:[36m188[0m - [33m[1mfailed to get client address info: &#x27;NoneType&#x27; object has no attribute &#x27;getsockname&#x27;[0m
+[32m2021-11-25 18:54:14.758[0m | [33m[1mWARNING [0m | [36mhttprunner.client[0m:[36mrequest[0m:[36m196[0m - [33m[1mfailed to get server address info: &#x27;NoneType&#x27; object has no attribute &#x27;getpeername&#x27;[0m
+[32m2021-11-25 18:54:14.758[0m | [34m[1mDEBUG   [0m | [36mhttprunner.client[0m:[36mlog_print[0m:[36m40[0m - [34m[1m
+================== request details ==================
+method   : GET
+url      : http://127.0.0.1:8999/searchPhone
+headers  : {
+    &quot;User-Agent&quot;: &quot;python-requests/2.26.0&quot;,
+    &quot;Accept-Encoding&quot;: &quot;gzip, deflate, br&quot;,
+    &quot;Accept&quot;: &quot;*/*&quot;,
+    &quot;Connection&quot;: &quot;keep-alive&quot;,
+    &quot;UContent-Type&quot;: &quot;application/json&quot;,
+    &quot;HRUN-Request-ID&quot;: &quot;HRUN-16de776c-7765-4aa4-a085-5ae0baae5d57-654754&quot;
+}
+cookies  : {}
+body     : None
+[0m
+[32m2021-11-25 18:54:14.759[0m | [34m[1mDEBUG   [0m | [36mhttprunner.client[0m:[36mlog_print[0m:[36m40[0m - [34m[1m
+================== response details ==================
+status_code : 200
+headers  : {
+    &quot;Content-Type&quot;: &quot;text/html; charset=utf-8&quot;,
+    &quot;Content-Length&quot;: &quot;51&quot;,
+    &quot;Server&quot;: &quot;Werkzeug/2.0.2 Python/3.8.10&quot;,
+    &quot;Date&quot;: &quot;Thu, 25 Nov 2021 10:54:14 GMT&quot;
+}
+cookies  : {}
+encoding : utf-8
+content_type : text/html; charset=utf-8
+body     : {
+    &quot;Error_code&quot;: 11,
+    &quot;error_message&quot;: &quot;system error&quot;
+}
+[0m
+[32m2021-11-25 18:54:14.759[0m | [1mINFO    [0m | [36mhttprunner.client[0m:[36mrequest[0m:[36m217[0m - [1mstatus_code: 200, response_time(ms): 3.65 ms, response_length: 0 bytes[0m
+[32m2021-11-25 18:54:14.759[0m | [1mINFO    [0m | [36mhttprunner.response[0m:[36mvalidate[0m:[36m249[0m - [1massert status_code equal 200(int)	==&gt; pass[0m
+[32m2021-11-25 18:54:14.759[0m | [1mINFO    [0m | [36mhttprunner.response[0m:[36mvalidate[0m:[36m249[0m - [1massert body.Error_code equal 11(int)	==&gt; pass[0m
+[32m2021-11-25 18:54:14.759[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36m__run_step[0m:[36m304[0m - [1mrun step end: searchByidAndName &lt;&lt;&lt;&lt;&lt;&lt;
+[0m
+[32m2021-11-25 18:54:14.760[0m | [1mINFO    [0m | [36mhttprunner.runner[0m:[36mtest_start[0m:[36m460[0m - [1mgenerate testcase log: /Users/fengbo.zhu/Desktop/pyProject/Entrytest/logs/16de776c-7765-4aa4-a085-5ae0baae5d57.run.log[0m
+<br/></div></td></tr></tbody></table></body></html>
